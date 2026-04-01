@@ -1,5 +1,5 @@
 import json
-from typing import AsyncGenerator, cast
+from typing import Any, AsyncGenerator, cast
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -7,6 +7,9 @@ from openai import AsyncOpenAI, AsyncStream
 from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+
+from tools.models import ToolDefinition
+from tools.streaming import handle_finish_reason, handle_tool_calls
 
 app = FastAPI()
 
@@ -28,16 +31,22 @@ openrouter_client = AsyncOpenAI(
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     enable_reasoning: bool = True
+    tools: list[ToolDefinition] | None = None
+    tool_choice: str | dict[str, Any] | None = None
+    parallel_tool_calls: bool | None = None
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     return {"message": "Hello World"}
 
 
@@ -45,13 +54,18 @@ async def root():
 async def chat(request: ChatRequest):
     messages: list[ChatCompletionMessageParam] = cast(
         list[ChatCompletionMessageParam],
-        [{"role": m.role, "content": m.content} for m in request.messages],
+        [m.model_dump(exclude_none=True) for m in request.messages],
     )
 
     response = await openrouter_client.chat.completions.create(
         model=settings.model,
         messages=messages,
         stream=True,
+        tools=cast(
+            Any, [t.model_dump() for t in request.tools] if request.tools else None
+        ),
+        tool_choice=cast(Any, request.tool_choice),
+        parallel_tool_calls=cast(Any, request.parallel_tool_calls),
         extra_body={"reasoning": {"enabled": request.enable_reasoning}},
     )
 
@@ -65,14 +79,22 @@ async def _stream_chunks(
     stream: AsyncStream[ChatCompletionChunk], enable_reasoning: bool
 ) -> AsyncGenerator[str, None]:
     async for chunk in stream:
-        delta = chunk.choices[0].delta if chunk.choices else None
-        if not delta:
+        if not chunk.choices:
             continue
+
+        delta = chunk.choices[0].delta
+        finish_reason = chunk.choices[0].finish_reason
 
         if enable_reasoning:
             reasoning = getattr(delta, "reasoning", None)
             if reasoning:
                 yield f"data: {json.dumps({'type': 'reasoning', 'data': reasoning})}\n\n"
+
+        for event in handle_tool_calls(delta):
+            yield event
+
+        for event in handle_finish_reason(finish_reason):
+            yield event
 
         content = delta.content
         if content:

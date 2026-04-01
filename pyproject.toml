@@ -9,3 +9,8 @@ dependencies = [
     "openai>=1.68.0",
     "pydantic-settings>=2.13.1",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.8",
+]
