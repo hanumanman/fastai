@@ -8,6 +8,8 @@ FastAPI backend that proxies chat requests to OpenRouter-compatible LLM APIs wit
 main.py              # FastAPI application (server)
 chat_client.py       # Entry point for the client
 pyproject.toml       # Dependencies and project metadata
+uv.lock              # Lock file for uv package manager
+.python-version      # Python version pin (3.12)
 .env                 # Environment variables (gitignored)
 
 tools/               # Server-side tool infrastructure
@@ -20,7 +22,10 @@ client/              # Client-side package
   main.py            # Conversation loop + SSE parsing
   tools/             # Pluggable tool implementations
     __init__.py      # TOOLS + AVAILABLE_TOOLS registry
-    weather.py       # Example: get_weather tool
+    weather/         # get_weather tool (Open-Meteo API)
+    pdf_parser/      # parse_pdf tool (PyMuPDF/fitz)
+    find_file/       # find_file tool (fzf fuzzy matching)
+    docx_parser/     # parse_docx tool (python-docx)
 ```
 
 ## Adding a New Tool
