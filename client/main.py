@@ -4,7 +4,6 @@ from typing import Any
 
 import httpx
 from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
     ChatCompletionMessageParam,
     ChatCompletionMessageToolCallParam,
     ChatCompletionToolMessageParam,
@@ -13,7 +12,7 @@ from openai.types.chat import (
 
 from client.tools import AVAILABLE_TOOLS, TOOLS
 
-URL = "http://localhost:8000/chat"
+URL = "http://localhost:8000"
 
 
 @dataclass
@@ -143,50 +142,71 @@ def _execute_tools(
     return results
 
 
-def _build_payload(conversation: list[ChatCompletionMessageParam]) -> dict[str, Any]:
+def _build_payload(
+    messages: list[ChatCompletionMessageParam], session_id: str | None
+) -> dict[str, Any]:
     return {
-        "messages": conversation,
+        "messages": messages,
+        "session_id": session_id,
         "enable_reasoning": True,
         "tools": TOOLS,
     }
 
 
-def _handle_response(
-    result: StreamResult, conversation: list[ChatCompletionMessageParam]
-) -> bool:
+def _handle_response(result: StreamResult) -> bool:
     if result.content:
-        conversation.append(
-            ChatCompletionAssistantMessageParam(
-                role="assistant", content=result.content
-            )
-        )
         return False
 
     if result.tool_calls_detected:
-        conversation.append(
-            ChatCompletionAssistantMessageParam(
-                role="assistant", tool_calls=result.tool_calls
-            )
-        )
-        tool_results = _execute_tools(result.tool_calls)
-        conversation.extend(tool_results)
         return True
 
     return False
 
 
-def run_conversation(prompt: str) -> None:
-    conversation: list[ChatCompletionMessageParam] = [
+def run_conversation(
+    prompt: str, session_id: str | None = None
+) -> tuple[str | None, list[ChatCompletionMessageParam]]:
+    messages: list[ChatCompletionMessageParam] = [
         ChatCompletionUserMessageParam(role="user", content=prompt)
     ]
 
     while True:
-        payload = _build_payload(conversation)
+        payload = _build_payload(messages, session_id)
 
         with httpx.Client() as client:
-            with client.stream("POST", URL, json=payload, timeout=120.0) as response:
+            with client.stream(
+                "POST", f"{URL}/chat", json=payload, timeout=120.0
+            ) as response:
                 response.raise_for_status()
                 result = _parse_stream(response)
 
-        if not _handle_response(result, conversation):
+        if result.tool_calls_detected:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": result.content if result.content else None,
+                    "tool_calls": result.tool_calls,
+                }
+            )
+            tool_results = _execute_tools(result.tool_calls)
+            messages.extend(tool_results)
+        else:
             break
+
+    return session_id, messages
+
+
+def list_sessions() -> list[dict[str, Any]]:
+    with httpx.Client() as client:
+        response = client.get(f"{URL}/sessions")
+        response.raise_for_status()
+        return response.json()
+
+
+def delete_session(session_id: str) -> bool:
+    with httpx.Client() as client:
+        response = client.delete(f"{URL}/sessions/{session_id}")
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        return True

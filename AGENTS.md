@@ -89,6 +89,7 @@ uv run pytest -v                    # Verbose output
 ```
 main.py              # FastAPI application (server)
 chat_client.py       # Entry point for the client
+sessions.py          # SQLite-based session persistence
 pyproject.toml       # Dependencies and project metadata
 uv.lock              # Lock file for uv package manager
 .python-version      # Python version pin (3.12)
@@ -108,6 +109,7 @@ client/              # Client-side package
     pdf_parser/      # parse_pdf tool (PyMuPDF/fitz)
     find_file/       # find_file tool (fzf fuzzy matching)
     docx_parser/     # parse_docx tool (python-docx)
+    web_search/      # web_search tool (DuckDuckGo/DDGS)
 ```
 
 ### Adding Tools
