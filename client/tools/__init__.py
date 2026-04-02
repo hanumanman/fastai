@@ -2,6 +2,7 @@ from client.tools.docx_parser import parse_docx
 from client.tools.find_file import find_file
 from client.tools.pdf_parser import parse_pdf
 from client.tools.weather import get_weather
+from client.tools.web_search import web_search
 
 TOOLS = [
     {
@@ -80,6 +81,27 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web and return results with titles, URLs, and snippets",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query string",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default 5)",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 AVAILABLE_TOOLS = {
@@ -87,4 +109,5 @@ AVAILABLE_TOOLS = {
     "parse_pdf": parse_pdf,
     "find_file": find_file,
     "parse_docx": parse_docx,
+    "web_search": web_search,
 }
