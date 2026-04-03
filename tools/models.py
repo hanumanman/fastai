@@ -7,8 +7,3 @@ class ToolFunction(BaseModel):
     name: str
     description: str
     parameters: dict[str, Any]
-
-
-class ToolDefinition(BaseModel):
-    type: str = "function"
-    function: ToolFunction

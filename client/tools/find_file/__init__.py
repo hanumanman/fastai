@@ -2,7 +2,6 @@ import subprocess
 
 
 def find_file(query: str) -> str:
-    """Find files in the current codebase using fzf."""
     try:
         result = subprocess.run(
             ["fzf", "--filter", query],

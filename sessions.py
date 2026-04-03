@@ -3,15 +3,22 @@ import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+
+from openai.types.chat import ChatCompletionMessageParam
+from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent / "sessions.db"
+
+
+class SessionInfo(BaseModel):
+    id: str
+    message_count: int
 
 
 @dataclass
 class Session:
     id: str
-    messages: list[dict[str, Any]] = field(default_factory=list)
+    messages: list[ChatCompletionMessageParam] = field(default_factory=list)
 
 
 class SessionStore:
@@ -35,7 +42,9 @@ class SessionStore:
                 )
             """)
 
-    def create(self, messages: list[dict[str, Any]] | None = None) -> Session:
+    def create(
+        self, messages: list[ChatCompletionMessageParam] | None = None
+    ) -> Session:
         session_id = uuid.uuid4().hex[:12]
         msg_json = json.dumps(messages or [])
         with self._get_conn() as conn:
@@ -52,9 +61,12 @@ class SessionStore:
             ).fetchone()
         if row is None:
             return None
-        return Session(id=row["id"], messages=json.loads(row["messages"]))
+        messages: list[ChatCompletionMessageParam] = json.loads(row["messages"])
+        return Session(id=row["id"], messages=messages)
 
-    def update(self, session_id: str, messages: list[dict[str, Any]]) -> Session | None:
+    def update(
+        self, session_id: str, messages: list[ChatCompletionMessageParam]
+    ) -> Session | None:
         msg_json = json.dumps(messages)
         with self._get_conn() as conn:
             cursor = conn.execute(

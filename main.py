@@ -4,25 +4,29 @@ from typing import Any, AsyncGenerator, cast
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI, AsyncStream
-from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam
+from openai.types.chat import (
+    ChatCompletionChunk,
+    ChatCompletionMessageParam,
+    ChatCompletionToolChoiceOptionParam,
+    ChatCompletionToolUnionParam,
+)
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
-from sessions import store
-from tools.models import ToolDefinition
+from sessions import SessionInfo, SessionStore, store
 from tools.streaming import handle_finish_reason, handle_tool_calls
 
 app = FastAPI()
 
 
 class Settings(BaseSettings):
-    base_url: str = "https://openrouter.ai/api/v1"
-    api_key: str = ""
-    model: str = "qwen/qwen3.6-plus-preview:free"
+    base_url: str
+    api_key: str
+    model: str
     model_config = {"env_file": ".env"}
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]  # ty:ignore[missing-argument]
 
 openrouter_client = AsyncOpenAI(
     base_url=settings.base_url,
@@ -42,14 +46,9 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     session_id: str | None = None
     enable_reasoning: bool = True
-    tools: list[ToolDefinition] | None = None
-    tool_choice: str | dict[str, Any] | None = None
-    parallel_tool_calls: bool | None = None
-
-
-class SessionInfo(BaseModel):
-    id: str
-    message_count: int
+    tools: list[ChatCompletionToolUnionParam]
+    tool_choice: ChatCompletionToolChoiceOptionParam
+    parallel_tool_calls: bool
 
 
 class ChatResponse(BaseModel):
@@ -75,35 +74,33 @@ async def delete_session(session_id: str) -> dict[str, str]:
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest) -> StreamingResponse:
     session_id = request.session_id
-    if session_id:
+    if not session_id:
+        stored_messages: list[ChatCompletionMessageParam] = []
+    else:
         session = store.get(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
         stored_messages = session.messages
-    else:
-        stored_messages = []
 
-    incoming = [m.model_dump(exclude_none=True) for m in request.messages]
-    all_messages: list[ChatCompletionMessageParam] = cast(
-        list[ChatCompletionMessageParam], stored_messages + incoming
-    )
+    incoming: list[ChatCompletionMessageParam] = [
+        m.model_dump(exclude_none=True) for m in request.messages
+    ]
+    all_messages: list[ChatCompletionMessageParam] = stored_messages + incoming
 
     if not session_id:
-        session_id = store.create(cast(list[dict[str, Any]] | None, all_messages)).id
+        session_id = store.create(all_messages).id
     else:
-        store.update(session_id, cast(list[dict[str, Any]], all_messages))
+        store.update(session_id, all_messages)
 
     response = await openrouter_client.chat.completions.create(
         model=settings.model,
         messages=all_messages,
         stream=True,
-        tools=cast(
-            Any, [t.model_dump() for t in request.tools] if request.tools else None
-        ),
-        tool_choice=cast(Any, request.tool_choice),
-        parallel_tool_calls=cast(Any, request.parallel_tool_calls),
+        tools=request.tools,
+        tool_choice=request.tool_choice,
+        parallel_tool_calls=request.parallel_tool_calls,
         extra_body={"reasoning": {"enabled": request.enable_reasoning}},
     )
 
@@ -118,6 +115,7 @@ async def _stream_chunks(
     enable_reasoning: bool,
     session_id: str,
     messages: list[ChatCompletionMessageParam],
+    store_instance: SessionStore = store,
 ) -> AsyncGenerator[str, None]:
     content_parts: list[str] = []
     tool_calls_accum: dict[int, dict[str, Any]] = {}
@@ -166,6 +164,6 @@ async def _stream_chunks(
     if tool_calls_accum:
         assistant_msg["tool_calls"] = list(tool_calls_accum.values())
     messages.append(cast(ChatCompletionMessageParam, assistant_msg))
-    store.update(session_id, cast(list[dict[str, Any]], messages))
+    store_instance.update(session_id, messages)
 
     yield "data: [DONE]\n\n"

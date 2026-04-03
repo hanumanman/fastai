@@ -10,7 +10,7 @@ from client import list_sessions, delete_session
 from client.main import URL, _build_payload, _execute_tools, _parse_stream
 
 
-COMMANDS = {
+COMMANDS: dict[str, str] = {
     "/new": "Start a new session",
     "/list": "List all sessions",
     "/switch <id>": "Switch to an existing session",

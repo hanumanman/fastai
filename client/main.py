@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -7,6 +7,7 @@ from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionMessageToolCallParam,
     ChatCompletionToolMessageParam,
+    ChatCompletionToolUnionParam,
     ChatCompletionUserMessageParam,
 )
 
@@ -145,11 +146,14 @@ def _execute_tools(
 def _build_payload(
     messages: list[ChatCompletionMessageParam], session_id: str | None
 ) -> dict[str, Any]:
+    tools: list[ChatCompletionToolUnionParam] = TOOLS
     return {
         "messages": messages,
         "session_id": session_id,
         "enable_reasoning": True,
-        "tools": TOOLS,
+        "tools": tools,
+        "tool_choice": "auto",
+        "parallel_tool_calls": True,
     }
 
 

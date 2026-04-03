@@ -1,6 +1,6 @@
 import os
 
-import fitz
+import fitz  # type: ignore[import-untyped]
 
 
 def _extract_text_from_path(file_path: str) -> str:

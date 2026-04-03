@@ -1,10 +1,14 @@
+from typing import Any, Callable
+
+from openai.types.chat import ChatCompletionToolUnionParam
+
 from client.tools.docx_parser import parse_docx
 from client.tools.find_file import find_file
 from client.tools.pdf_parser import parse_pdf
 from client.tools.weather import get_weather
 from client.tools.web_search import web_search
 
-TOOLS = [
+TOOLS: list[ChatCompletionToolUnionParam] = [
     {
         "type": "function",
         "function": {
@@ -104,7 +108,7 @@ TOOLS = [
     },
 ]
 
-AVAILABLE_TOOLS = {
+AVAILABLE_TOOLS: dict[str, Callable[..., str]] = {
     "get_weather": get_weather,
     "parse_pdf": parse_pdf,
     "find_file": find_file,

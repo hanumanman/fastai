@@ -1,8 +1,9 @@
 import json
 import subprocess
+from typing import Any
 
 
-def _run_curl(url: str) -> dict:
+def _run_curl(url: str) -> dict[str, Any]:
     result = subprocess.run(
         ["curl", "-s", url],
         capture_output=True,
